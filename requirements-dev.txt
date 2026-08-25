@@ -1,0 +1,7 @@
+# Development and build tooling. Not needed to run JARVIS.
+-r requirements.txt
+
+pytest>=7.4              # the test suite
+pyinstaller==6.11.1      # pinned: spec files are version-sensitive
+pillow>=10.0             # tools/make_icon.py
+pyflakes>=3.0            # lint

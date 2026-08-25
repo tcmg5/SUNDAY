@@ -17,14 +17,12 @@ machine, never at build time - hence the explicit lists.
 import sys
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
-block_cipher = None
-
 datas = []
 binaries = []
 hiddenimports = []
 
 # Packages that need their data files and native libraries collected wholesale.
-for package in ("openwakeword", "onnxruntime", "ctranslate2", "faster_whisper", "piper"):
+for package in ("openwakeword", "onnxruntime", "ctranslate2", "faster_whisper", "piper", "av"):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
         datas += pkg_datas
@@ -94,13 +92,10 @@ a = Analysis(
         "PySide6.QtBluetooth", "PySide6.QtNfc", "PySide6.QtPositioning",
         "matplotlib", "tkinter", "PIL", "pytest", "torch", "tensorflow",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 # Two executables from one analysis:
 #   JARVIS.exe          windowed - no console flashes up behind the dashboard
@@ -134,7 +129,6 @@ coll = COLLECT(
     exe_gui,
     exe_console,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=False,
