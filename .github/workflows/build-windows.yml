@@ -125,6 +125,18 @@ jobs:
           Compress-Archive -Path "dist\JARVIS\*" `
             -DestinationPath "packaging\Output\JARVIS-portable-${{ steps.version.outputs.value }}.zip"
 
+      - name: Compute checksums
+        id: checksums
+        shell: pwsh
+        run: |
+          $lines = @()
+          Get-ChildItem "packaging\Output\*" -Include *.exe, *.zip | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            $lines += "$($_.Name)`n``$hash``"
+            "$hash  $($_.Name)" | Out-File -Append -Encoding ascii "packaging\Output\SHA256SUMS.txt"
+          }
+          "value<<EOF`n$($lines -join "`n`n")`nEOF" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+
       - name: Upload the installer
         uses: actions/upload-artifact@v4
         with:
@@ -152,6 +164,7 @@ jobs:
           files: |
             packaging/Output/JARVIS-Setup-*.exe
             packaging/Output/JARVIS-portable-*.zip
+            packaging/Output/SHA256SUMS.txt
           body: |
             ## Install
 
@@ -165,3 +178,17 @@ jobs:
             On first launch JARVIS asks for an Anthropic API key and downloads
             about 200 MB of speech models. After that it runs offline apart from
             the reasoning itself.
+
+            ## Verify the download
+
+            Before clicking past the SmartScreen warning, check the file is the
+            one this workflow built:
+
+            ```powershell
+            Get-FileHash .\JARVIS-Setup-${{ steps.version.outputs.value }}.exe -Algorithm SHA256
+            ```
+
+            ${{ steps.checksums.outputs.value }}
+
+            Built from commit ${{ github.sha }} by
+            [this run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).

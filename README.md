@@ -21,16 +21,31 @@ Regenerate the shot with `python tools/screenshot.py`.*
    There is also a [portable zip](https://github.com/tcmg5/SUNDAY/releases/download/v1.0.0/JARVIS-portable-1.0.0.zip)
    (245 MB) that needs no installation - unzip it and run `JARVIS.exe`.
    Older and newer builds are on the [Releases page](https://github.com/tcmg5/SUNDAY/releases).
-2. Run it. No administrator rights needed — it installs into your user profile.
-   - Windows SmartScreen will say the publisher is unknown, because the build
-     isn't code-signed. Click **More info** → **Run anyway**. Signing needs a
-     certificate that costs a few hundred a year; see
-     [Code signing](#code-signing).
-3. Launch **JARVIS** from the Start menu or desktop.
-4. On first run it asks for your Anthropic API key
+2. **Windows will refuse to run it.** This is expected: the build isn't
+   code-signed, so SmartScreen has no publisher to check and says
+   *"Windows protected your PC"*.
+
+   Verify the file first, then allow it:
+
+   ```powershell
+   Get-FileHash .\JARVIS-Setup-1.0.0.exe -Algorithm SHA256
+   ```
+   It should print
+   `AD482EDA336DC10BA7D31F24C690F3F3F89642DEA37178D3BAC2E12B003B53D9`,
+   matching `SHA256SUMS.txt` on the release. If it doesn't match, don't run it.
+
+   Then click **More info** → **Run anyway**. If your browser blocked the
+   download instead, open its Downloads list and choose **Keep**.
+
+   Prefer not to click past a security warning? [Run from source](#windows--from-source)
+   instead — same application, no binary to trust. Signing needs a certificate
+   costing a few hundred a year; see [Code signing](#code-signing).
+3. No administrator rights needed — it installs into your user profile.
+4. Launch **JARVIS** from the Start menu or desktop.
+5. On first run it asks for your Anthropic API key
    ([get one here](https://console.anthropic.com/settings/keys)), lets you pick
    a voice, and downloads about 200 MB of speech models. Once.
-5. **Allow the microphone** when Windows asks. If it never asks, go to
+6. **Allow the microphone** when Windows asks. If it never asks, go to
    `Settings → Privacy & security → Microphone` and turn on
    **"Let desktop apps access your microphone"**.
 
