@@ -15,7 +15,7 @@ import sys
 
 from .config import load_config, safe_roots
 from .logging_setup import setup_logging
-from .paths import configure_console
+from .paths import configure_console, is_frozen
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-wake", action="store_true", help="Disable the wake word")
     parser.add_argument("--no-voice", action="store_true", help="Silence TTS output")
     parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--json", action="store_true",
+                        help="Machine-readable doctor output")
     parser.add_argument("--setup", action="store_true",
                         help="Re-run first-time setup (API key, voice, models)")
     args = parser.parse_args(argv)
@@ -48,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(cfg, args.verbose)
 
     if args.command == "doctor":
-        return doctor(cfg)
+        return doctor(cfg, as_json=args.json)
     if args.command == "devices":
         return devices()
     if args.command == "voices":
@@ -109,64 +111,86 @@ def run(cfg: dict, args) -> int:
         return 1
 
 
-def doctor(cfg: dict) -> int:
+def doctor(cfg: dict, as_json: bool = False) -> int:
     """Check every moving part and say exactly what's wrong with each."""
-    print("\n\033[36mJARVIS system check\033[0m\n" + "─" * 52)
+    results: dict[str, dict] = {}
+    quiet = as_json
+
+    if not quiet:
+        print("\n\033[36mJARVIS system check\033[0m\n" + "─" * 52)
     problems = 0
 
     def check(label: str, ok: bool, detail: str = "") -> None:
         nonlocal problems
-        mark = "\033[92m✓\033[0m" if ok else "\033[91m✗\033[0m"
-        print(f" {mark} {label:<26} {detail}")
+        # JSON keeps the whole message; only the terminal view is trimmed.
+        results[label] = {"ok": bool(ok), "detail": detail}
+        if not quiet:
+            mark = "\033[92m✓\033[0m" if ok else "\033[91m✗\033[0m"
+            print(f" {mark} {label:<26} {detail[:70]}")
         if not ok:
             problems += 1
 
-    print("\n\033[1mCore\033[0m")
+    def section(title: str) -> None:
+        if not quiet:
+            print(f"\n\033[1m{title}\033[0m")
+
+    def probe(module: str, label: str, hint: str) -> None:
+        """Import a module and, when it fails, say why rather than guessing.
+
+        A frozen build fails here for reasons a source checkout never does - a
+        missing data file, a native library that didn't get collected - and
+        "pip install X" is actively misleading advice in that case.
+        """
+        try:
+            __import__(module)
+            check(label, True)
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, ImportError) and not is_frozen():
+                check(label, False, hint)
+            else:
+                # Collapse the multi-line banners some libraries emit.
+                check(label, False, " ".join(reason.split()))
+
+    section("Core")
     check("Python", sys.version_info >= (3, 9), f"{sys.version.split()[0]}")
     for module, label in (
         ("numpy", "numpy"), ("anthropic", "anthropic"), ("yaml", "PyYAML"),
         ("httpx", "httpx"),
     ):
+        probe(module, label, "pip install -r requirements.txt")
+
+    section("Audio in")
+    # Two separate questions: is the library present, and is there a mic?
+    # A build server answers yes/no; only the first is ever a packaging fault.
+    probe("sounddevice", "sounddevice", "pip install sounddevice")
+    if results.get("sounddevice", {}).get("ok"):
         try:
-            __import__(module)
-            check(label, True)
-        except ImportError:
-            check(label, False, "pip install -r requirements.txt")
+            import sounddevice as sd
 
-    print("\n\033[1mAudio in\033[0m")
-    try:
-        import sounddevice as sd
-
-        default_in = sd.query_devices(kind="input")
-        check("sounddevice", True, default_in["name"][:32])
-    except Exception as exc:
-        check("sounddevice", False, str(exc)[:44])
+            default_in = sd.query_devices(kind="input")
+            check("microphone", True, default_in["name"][:40])
+        except Exception as exc:
+            check("microphone", False, f"no input device ({str(exc)[:44]})")
     for module, label, hint in (
         ("openwakeword", "openwakeword", "pip install openwakeword"),
         ("faster_whisper", "faster-whisper", "pip install faster-whisper"),
     ):
-        try:
-            __import__(module)
-            check(label, True)
-        except ImportError:
-            check(label, False, hint)
+        probe(module, label, hint)
     # Optional: absence is fine, so this never counts as a problem.
     try:
         import webrtcvad  # noqa: F401
 
-        print(f" \033[92m✓\033[0m {'voice detection':<26} webrtcvad")
+        check("voice detection", True, "webrtcvad")
     except ImportError:
-        print(f" \033[92m✓\033[0m {'voice detection':<26} built-in (webrtcvad not installed)")
+        check("voice detection", True, "built-in (webrtcvad not installed)")
 
-    print("\n\033[1mVoice out\033[0m")
+    section("Voice out")
     engine = cfg["tts"]["engine"]
     if engine == "piper":
-        try:
-            import piper  # noqa: F401
-
-            check("piper", True, cfg["tts"]["piper_voice"])
-        except ImportError:
-            check("piper", False, "pip install piper-tts")
+        probe("piper", "piper", "pip install piper-tts")
+        if results.get("piper", {}).get("ok"):
+            results["piper"]["detail"] = cfg["tts"]["piper_voice"]
         from .config import MODELS_DIR
 
         model = MODELS_DIR / "piper" / f"{cfg['tts']['piper_voice']}.onnx"
@@ -176,21 +200,31 @@ def doctor(cfg: dict) -> int:
         check("ELEVENLABS_API_KEY", bool(cfg["secrets"]["elevenlabs_api_key"]), "")
         check("voice id set", bool(cfg["tts"]["elevenlabs_voice_id"]), "")
 
-    print("\n\033[1mBrain\033[0m")
+    section("Brain")
     check("ANTHROPIC_API_KEY", bool(cfg["secrets"]["anthropic_api_key"]),
           "export ANTHROPIC_API_KEY=..." if not cfg["secrets"]["anthropic_api_key"] else cfg["assistant"]["model"])
 
-    print("\n\033[1mUI\033[0m")
+    section("UI")
     try:
         import PySide6  # noqa: F401
 
         check("PySide6", True, f"mode: {cfg['ui']['mode']}")
-    except ImportError:
-        check("PySide6", False, "pip install PySide6 — console mode still works")
+    except Exception as exc:
+        check("PySide6", False, f"{type(exc).__name__}: {exc}"[:70])
 
-    print("\n\033[1mFile access\033[0m")
+    section("File access")
     roots = safe_roots(cfg)
     check("safe roots", bool(roots), ", ".join(str(r) for r in roots) or "none exist!")
+
+    if as_json:
+        import json
+
+        print(json.dumps({
+            "frozen": is_frozen(),
+            "problems": problems,
+            "checks": results,
+        }, indent=2))
+        return 1 if problems else 0
 
     print("\n" + "─" * 52)
     if problems:

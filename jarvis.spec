@@ -17,28 +17,26 @@ machine, never at build time - hence the explicit lists.
 import os
 import sys
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = []
 binaries = []
 hiddenimports = []
 
-# Packages that need their data files and native libraries collected wholesale.
-for package in ("openwakeword", "onnxruntime", "ctranslate2", "faster_whisper", "piper", "av"):
-    try:
-        pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
-        datas += pkg_datas
-        binaries += pkg_binaries
-        hiddenimports += pkg_hidden
-    except Exception as exc:  # a missing optional package shouldn't kill the build
-        print(f"[spec] skipping {package}: {exc}")
-
-# piper's phonemiser data lives in a separate distribution.
-for package in ("espeakng_loader", "piper_phonemize"):
+# Only packages that resolve their own data files by path at runtime need
+# collecting by hand. Everything else - onnxruntime, ctranslate2,
+# faster-whisper, PyAV, numpy, scipy, scikit-learn - is handled by
+# PyInstaller's own hooks, and collect_all() on top of those is actively
+# harmful: it re-collects shared binaries under a second set of paths, and the
+# duplicate registration makes CPython refuse the extension with "cannot load
+# module more than once per process". numpy dies that way, and every package
+# that imports it dies after.
+for package in ("openwakeword", "piper"):
     try:
         datas += collect_data_files(package)
-    except Exception:
-        pass
+        hiddenimports += collect_submodules(package)
+    except Exception as exc:  # a missing optional package shouldn't kill the build
+        print(f"[spec] skipping {package}: {exc}")
 
 # Lazily-imported submodules the analyser won't follow.
 hiddenimports += collect_submodules("scipy.special")
@@ -55,7 +53,6 @@ hiddenimports += [
     "httpx",
     "h11",
     "sounddevice",
-    "_sounddevice_data",
     "send2trash",
     "psutil",
     "yaml",

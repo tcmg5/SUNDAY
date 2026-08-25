@@ -4,6 +4,7 @@ None of this can be caught by running from source - which is exactly why it
 needs tests. A windowed PyInstaller build has no stdout, and its install
 directory is read-only.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -169,6 +170,31 @@ def test_bundled_resource_returns_none_when_absent(monkeypatch, tmp_path):
     assert paths.bundled_resource("here.txt") == tmp_path / "here.txt"
 
 
+# ── build toolchain ──────────────────────────────────────────────────────
+def test_pyinstaller_pin_is_new_enough_for_modern_numpy():
+    """PyInstaller 6.11.1 collects numpy 2.4's C extensions but not its pure
+    Python submodules. Nothing fails at build time; the packaged app dies on
+    "No module named 'numpy._core._exceptions'", and every library that imports
+    numpy then fails with "cannot load module more than once per process"."""
+    from pathlib import Path as _Path
+
+    text = (_Path(__file__).resolve().parent.parent / "requirements-dev.txt").read_text()
+    match = re.search(r"^pyinstaller==(\d+)\.(\d+)", text, re.M)
+    assert match, "pyinstaller must stay pinned - spec files are version-sensitive"
+    major, minor = int(match.group(1)), int(match.group(2))
+    assert (major, minor) >= (6, 22), f"pyinstaller {major}.{minor} is too old for numpy 2.4"
+
+
+def test_spec_avoids_collect_all():
+    """collect_all() re-collects shared binaries that PyInstaller's own hooks
+    already handle, under a second set of paths."""
+    code = "\n".join(
+        line for line in SPEC.read_text().splitlines()
+        if not line.lstrip().startswith("#")     # the comment explains why not
+    )
+    assert "collect_all(" not in code
+
+
 # ── build definition ─────────────────────────────────────────────────────
 SPEC = Path(__file__).resolve().parent.parent / "jarvis.spec"
 
@@ -181,10 +207,12 @@ def test_spec_builds_both_a_windowed_and_a_console_executable():
     assert "exe_gui," in text and "exe_console," in text
 
 
-def test_spec_collects_the_packages_that_load_data_at_runtime():
+def test_spec_collects_the_packages_that_resolve_data_by_path():
+    """These two find their model and phoneme files relative to __file__, which
+    PyInstaller cannot follow. The rest are left to PyInstaller's own hooks."""
     text = SPEC.read_text()
-    for package in ("openwakeword", "onnxruntime", "ctranslate2", "faster_whisper", "piper"):
-        assert package in text, f"{package} is not collected; it will be missing at runtime"
+    for package in ("openwakeword", "piper"):
+        assert f'"{package}"' in text, f"{package} data files are not collected"
 
 
 def test_spec_entry_point_is_the_absolute_import_launcher():

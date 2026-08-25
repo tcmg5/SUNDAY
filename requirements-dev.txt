@@ -2,6 +2,10 @@
 -r requirements.txt
 
 pytest>=7.4              # the test suite
-pyinstaller==6.11.1      # pinned: spec files are version-sensitive
+# Pinned because spec files are version-sensitive, but do NOT pin this back:
+# 6.11.1 predates numpy 2.4 and silently fails to collect numpy._core's pure
+# Python submodules. The build succeeds, then the packaged app dies on
+# "No module named 'numpy._core._exceptions'" and every dependant import after.
+pyinstaller==6.22.2
 pillow>=10.0             # tools/make_icon.py
 pyflakes>=3.0            # lint
