@@ -69,6 +69,9 @@ DEFAULTS: dict[str, Any] = {
         # Don't bother transcribing anything shorter than this.
         "min_utterance_sec": 0.4,
         "vad_aggressiveness": 2,  # 0-3, higher = more aggressive filtering
+        # Use webrtcvad when it is installed. Set false to always use the
+        # built-in detector.
+        "prefer_webrtcvad": True,
     },
     "stt": {
         # "faster-whisper" (local, recommended) | "whisper-api" (needs OpenAI key)

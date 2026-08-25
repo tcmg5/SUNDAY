@@ -353,6 +353,12 @@ phrase, not two words with a gap.
 
 **It cuts me off mid-sentence.** Raise `audio.silence_timeout_sec` to 1.5.
 
+**It mishears me in a noisy room.** JARVIS ships its own voice detector, which
+needs no dependencies and works everywhere. In a genuinely noisy room, Google's
+webrtcvad does better — install it with `pip install webrtcvad` (macOS/Linux)
+and JARVIS picks it up automatically. It isn't bundled because upstream
+publishes no Windows wheels and the prebuilt fork breaks the packaged build.
+
 **It hears itself and replies to its own voice.** Headphones fix it outright.
 The mic buffer is already flushed after each reply, but a loud speaker close to
 a sensitive mic can still get through.

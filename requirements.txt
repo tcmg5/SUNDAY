@@ -9,11 +9,6 @@ python-dotenv>=1.0         # loads .env so keys aren't in your shell profile
 sounddevice>=0.4.6         # microphone + playback (needs PortAudio, see README)
 openwakeword>=0.6.0        # the "hey jarvis" wake word, offline
 faster-whisper>=1.0.0      # speech to text, offline
-# Utterance endpointing. Upstream webrtcvad ships no Windows wheels and tries to
-# compile C against MSVC; webrtcvad-wheels is the same library with prebuilt
-# binaries and the identical import name.
-webrtcvad>=2.0.10; platform_system != "Windows"
-webrtcvad-wheels>=2.0.14; platform_system == "Windows"
 piper-tts>=1.2.0           # the voice, offline
 
 # --- desktop ----------------------------------------------------------
@@ -23,5 +18,12 @@ psutil>=5.9                # system status reporting
 beautifulsoup4>=4.12       # readable text extraction from web pages
 
 # --- optional ---------------------------------------------------------
+# webrtcvad — a more robust voice detector than the built-in one, worth having
+# in a noisy room. Deliberately NOT required: upstream ships no Windows wheels,
+# and the prebuilt fork (webrtcvad-wheels) breaks PyInstaller's bundled hook,
+# which looks up metadata under the original name. JARVIS detects it at runtime
+# and uses it when present.
+#   pip install webrtcvad          (macOS/Linux)
+#   pip install webrtcvad-wheels   (Windows, source installs only)
 # miniaudio>=1.59          # decode ElevenLabs MP3 without ffmpeg
 # openai>=1.30             # only if stt.engine = "whisper-api"

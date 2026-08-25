@@ -54,7 +54,6 @@ hiddenimports += [
     "h11",
     "sounddevice",
     "_sounddevice_data",
-    "webrtcvad",
     "send2trash",
     "psutil",
     "yaml",
@@ -91,6 +90,11 @@ a = Analysis(
         "PySide6.QtMultimedia", "PySide6.QtPdf", "PySide6.QtDesigner",
         "PySide6.QtBluetooth", "PySide6.QtNfc", "PySide6.QtPositioning",
         "matplotlib", "tkinter", "PIL", "pytest", "torch", "tensorflow",
+        # webrtcvad is optional and detected at runtime. Excluding it keeps
+        # PyInstaller from loading the bundled hook-webrtcvad.py, which calls
+        # copy_metadata("webrtcvad") and dies when only the renamed
+        # webrtcvad-wheels fork is installed.
+        "webrtcvad",
     ],
     noarchive=False,
 )

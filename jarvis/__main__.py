@@ -142,7 +142,6 @@ def doctor(cfg: dict) -> int:
         check("sounddevice", False, str(exc)[:44])
     for module, label, hint in (
         ("openwakeword", "openwakeword", "pip install openwakeword"),
-        ("webrtcvad", "webrtcvad", "pip install webrtcvad (optional)"),
         ("faster_whisper", "faster-whisper", "pip install faster-whisper"),
     ):
         try:
@@ -150,6 +149,13 @@ def doctor(cfg: dict) -> int:
             check(label, True)
         except ImportError:
             check(label, False, hint)
+    # Optional: absence is fine, so this never counts as a problem.
+    try:
+        import webrtcvad  # noqa: F401
+
+        print(f" \033[92m✓\033[0m {'voice detection':<26} webrtcvad")
+    except ImportError:
+        print(f" \033[92m✓\033[0m {'voice detection':<26} built-in (webrtcvad not installed)")
 
     print("\n\033[1mVoice out\033[0m")
     engine = cfg["tts"]["engine"]
