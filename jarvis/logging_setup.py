@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import logging.handlers
+import sys
 from datetime import datetime
 from pathlib import Path
+
+from .paths import _NullStream
 
 
 def setup_logging(cfg: dict, verbose: bool = False) -> None:
@@ -26,10 +29,13 @@ def setup_logging(cfg: dict, verbose: bool = False) -> None:
     )
     root.addHandler(file_handler)
 
-    console = logging.StreamHandler()
-    console.setLevel(level)
-    console.setFormatter(logging.Formatter("\033[2m%(levelname)s %(message)s\033[0m"))
-    root.addHandler(console)
+    # In a windowed build there is no console to log to, and attaching a
+    # handler to a null stream just burns cycles formatting discarded text.
+    if sys.stderr is not None and not isinstance(sys.stderr, _NullStream):
+        console = logging.StreamHandler()
+        console.setLevel(level)
+        console.setFormatter(logging.Formatter("\033[2m%(levelname)s %(message)s\033[0m"))
+        root.addHandler(console)
 
     # These are chatty and rarely what you're debugging.
     for noisy in ("httpx", "httpcore", "urllib3", "anthropic", "faster_whisper", "numba"):

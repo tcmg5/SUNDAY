@@ -16,3 +16,9 @@ logs/
 *.onnx
 *.tflite
 *.wav
+
+# Build output
+build/
+dist/
+packaging/Output/
+*.spec.bak

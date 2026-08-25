@@ -15,9 +15,12 @@ import sys
 
 from .config import load_config, safe_roots
 from .logging_setup import setup_logging
+from .paths import attach_null_streams
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Must happen before any output: a windowed build has no streams to use.
+    attach_null_streams()
     parser = argparse.ArgumentParser(prog="jarvis", description="Your desktop AI assistant.")
     parser.add_argument("command", nargs="?", default="run",
                         choices=["run", "doctor", "devices", "voices", "say"])
@@ -30,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-wake", action="store_true", help="Disable the wake word")
     parser.add_argument("--no-voice", action="store_true", help="Silence TTS output")
     parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--setup", action="store_true",
+                        help="Re-run first-time setup (API key, voice, models)")
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -49,11 +54,27 @@ def main(argv: list[str] | None = None) -> int:
         return voices(cfg)
     if args.command == "say":
         return say(cfg, " ".join(args.text) or "All systems are functioning within normal parameters.")
+    if args.setup:
+        from .ui.first_run import run_first_run
+
+        if not run_first_run(cfg):
+            return 0
     return run(cfg, args)
 
 
 def run(cfg: dict, args) -> int:
     from .core.assistant import Assistant
+
+    # A packaged build has no .env to edit, so ask for the key in the UI.
+    if cfg["ui"]["mode"] in ("command_center", "hud") and not args.text_mode:
+        try:
+            from .ui.first_run import needs_first_run, run_first_run
+
+            if needs_first_run(cfg) and not run_first_run(cfg):
+                print("Setup cancelled.")
+                return 0
+        except ImportError:
+            pass  # no Qt - the console path reports the missing key itself
 
     assistant = Assistant(cfg)
     try:

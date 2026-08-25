@@ -1,0 +1,124 @@
+name: Build Windows app
+
+# PyInstaller cannot cross-compile, so the Windows executable has to be built
+# on Windows. This runs on every push to a build branch, on demand, and on tags
+# (which additionally publish a GitHub Release).
+on:
+  push:
+    branches: ["claude/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=1.0.0-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.11.1 pillow
+
+      - name: Generate the icon
+        run: python tools/make_icon.py
+
+      - name: Run the test suite
+        run: python -m pytest tests/ -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Build with PyInstaller
+        run: pyinstaller jarvis.spec --noconfirm --clean
+
+      - name: Smoke-test the executable
+        shell: pwsh
+        run: |
+          # `doctor` exercises the real import graph - the fastest way to catch
+          # a module PyInstaller failed to bundle. It exits non-zero when
+          # something is unconfigured (no API key here), so check the output
+          # rather than the exit code.
+          # The console twin, because the windowed exe writes nowhere.
+          $out = & ".\dist\JARVIS\JARVIS-console.exe" doctor 2>&1 | Out-String
+          Write-Host $out
+          foreach ($needle in @("openwakeword", "faster-whisper", "piper", "PySide6", "sounddevice")) {
+            if ($out -notmatch [regex]::Escape($needle)) {
+              throw "doctor output never mentioned '$needle' - the build is probably missing it"
+            }
+          }
+          if ($out -match "ModuleNotFoundError|ImportError|Traceback") {
+            throw "the packaged executable hit an import error"
+          }
+          if (-Not (Test-Path ".\dist\JARVIS\JARVIS.exe")) {
+            throw "the windowed executable was not produced"
+          }
+          Write-Host "Both executables built; all subsystems present."
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=${{ steps.version.outputs.value }}" `
+            "packaging\installer.iss"
+
+      - name: Package the portable build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\JARVIS\*" `
+            -DestinationPath "packaging\Output\JARVIS-portable-${{ steps.version.outputs.value }}.zip"
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Setup-${{ steps.version.outputs.value }}
+          path: packaging/Output/JARVIS-Setup-*.exe
+          retention-days: 90
+
+      - name: Upload the portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-portable-${{ steps.version.outputs.value }}
+          path: packaging/Output/JARVIS-portable-*.zip
+          retention-days: 90
+
+      - name: Publish a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packaging/Output/JARVIS-Setup-*.exe
+            packaging/Output/JARVIS-portable-*.zip
+          body: |
+            ## Install
+
+            Download **JARVIS-Setup-${{ steps.version.outputs.value }}.exe** and run it.
+            No admin rights needed - it installs to your user profile.
+
+            Windows SmartScreen will warn that the publisher is unknown, because
+            this build is not code-signed. Click **More info** then
+            **Run anyway**.
+
+            On first launch JARVIS asks for an Anthropic API key and downloads
+            about 200 MB of speech models. After that it runs offline apart from
+            the reasoning itself.

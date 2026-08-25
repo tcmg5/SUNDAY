@@ -15,39 +15,51 @@ Regenerate the shot with `python tools/screenshot.py`.*
 
 ## Quick start
 
-### Windows
+### Windows — installer (easiest)
 
-1. **Install Python** from [python.org/downloads](https://www.python.org/downloads/)
-   if you don't have it. On the installer's first screen, tick
-   **"Add python.exe to PATH"** - almost every Windows problem below traces back
-   to skipping that box.
-2. **Download this project**: green `Code` button on GitHub → `Download ZIP` →
-   right-click the ZIP → `Extract All`. Or `git clone` it if you have git.
-3. **Right-click `setup.ps1`** → **`Run with PowerShell`**. It builds a virtual
-   environment, installs everything, downloads the wake-word model and the
-   voice, and puts a JARVIS shortcut on your desktop. Give it five to ten
-   minutes - Qt and Whisper are large.
+1. Download **`JARVIS-Setup.exe`** from
+   [Releases](https://github.com/tcmg5/SUNDAY/releases), or from the
+   [latest build](https://github.com/tcmg5/SUNDAY/actions/workflows/build-windows.yml)
+   (open the newest run, scroll to **Artifacts**).
+2. Run it. No administrator rights needed — it installs into your user profile.
+   - Windows SmartScreen will say the publisher is unknown, because the build
+     isn't code-signed. Click **More info** → **Run anyway**. Signing needs a
+     certificate that costs a few hundred a year; see
+     [Code signing](#code-signing).
+3. Launch **JARVIS** from the Start menu or desktop.
+4. On first run it asks for your Anthropic API key
+   ([get one here](https://console.anthropic.com/settings/keys)), lets you pick
+   a voice, and downloads about 200 MB of speech models. Once.
+5. **Allow the microphone** when Windows asks. If it never asks, go to
+   `Settings → Privacy & security → Microphone` and turn on
+   **"Let desktop apps access your microphone"**.
+
+Then say **"hey JARVIS"**.
+
+Your settings, API key and downloaded models live in
+`%APPDATA%\JARVIS`. Uninstalling asks before removing them.
+
+**If it doesn't start:** Start menu → **JARVIS diagnostics**. That's the same
+app built with a console attached, running `doctor`, so you can actually read
+the error.
+
+### Windows — from source
+
+For development, or if you'd rather not run an unsigned binary:
+
+1. Install Python from [python.org/downloads](https://www.python.org/downloads/),
+   ticking **"Add python.exe to PATH"** on the first installer screen.
+2. Download the code (green `Code` button → `Download ZIP` → extract).
+3. Right-click `setup.ps1` → **Run with PowerShell**.
    - If Windows says *"running scripts is disabled on this system"*, open
-     PowerShell in the project folder and run these two lines instead. The first
-     relaxes the policy **for that one window only** and changes nothing
-     permanently:
+     PowerShell in the folder and run these two lines. The first relaxes the
+     policy **for that window only**:
      ```powershell
      Set-ExecutionPolicy -Scope Process -Bypass -Force
      .\setup.ps1
      ```
-4. **Add your API key.** Open `.env` in Notepad and replace
-   `ANTHROPIC_API_KEY=sk-ant-...` with a real key from
-   [console.anthropic.com](https://console.anthropic.com).
-5. **Double-click `JARVIS.bat`**, or the desktop shortcut.
-6. **Allow the microphone** when Windows asks. If it never asks and the wake
-   word doesn't work, go to `Settings → Privacy & security → Microphone` and
-   turn on **"Let desktop apps access your microphone"**.
-
-Then say **"hey JARVIS"**.
-
-If double-clicking `JARVIS.bat` seems to do nothing, run
-**`JARVIS (show errors).bat`** instead - same thing, but it keeps a console
-window open so you can read what went wrong.
+4. Put your API key in `.env`, then double-click `JARVIS.bat`.
+   Use `JARVIS (show errors).bat` if nothing appears to happen.
 
 ### macOS / Linux
 
@@ -375,10 +387,53 @@ Full logs are in `logs/jarvis.log`.
 
 ---
 
+## Building the Windows app
+
+PyInstaller can't cross-compile, so the executable is built on a Windows runner
+by [`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml).
+It runs on every push to a `claude/**` branch and on demand, and produces two
+artifacts: the installer, and a portable zip for anyone who'd rather not
+install anything.
+
+Tagging publishes a GitHub Release:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The build does three things worth knowing about:
+
+- **Two executables.** `JARVIS.exe` is windowed, so no console flashes up behind
+  the dashboard. `JARVIS-console.exe` is the same application with a console
+  attached — the only way to read a crash message from a windowed build.
+- **A smoke test.** CI runs `JARVIS-console.exe doctor` against the packaged
+  binary and fails the build if any subsystem is missing. PyInstaller failures
+  are almost always missing dynamic imports, which never show up at build time
+  and always show up on a user's machine.
+- **`--onedir`, not `--onefile`.** A single-file build unpacks ~400 MB to a temp
+  directory on every launch, which adds seconds to startup and trips antivirus.
+
+To build locally on a Windows machine:
+
+```powershell
+pip install -r requirements.txt pyinstaller pillow
+python tools/make_icon.py
+pyinstaller jarvis.spec --noconfirm --clean
+.\dist\JARVIS\JARVIS.exe
+```
+
+### Code signing
+
+The build isn't signed, so SmartScreen warns on first run. To sign it, add an
+Authenticode certificate as the `WINDOWS_CERT` / `WINDOWS_CERT_PASSWORD`
+repository secrets and a `signtool` step after the PyInstaller step. An OV
+certificate runs roughly $200–400/year; an EV one clears SmartScreen
+immediately but costs more.
+
 ## Tests
 
 ```bash
-python -m pytest tests/ -q      # 81 tests, no hardware or network needed
+python -m pytest tests/ -q      # 95 tests, no hardware or network needed
 ```
 
 The suite concentrates on the parts where a bug is expensive: the path sandbox,

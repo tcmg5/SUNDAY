@@ -17,10 +17,19 @@ try:
 except ImportError:  # pragma: no cover - yaml is a hard dep, but fail readably
     yaml = None
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-MODELS_DIR = PROJECT_ROOT / "models"
-LOGS_DIR = PROJECT_ROOT / "logs"
+# Re-exported so the rest of the package can keep importing paths from config.
+from .paths import (  # noqa: F401
+    CONFIG_PATH, DATA_DIR, ENV_PATH, LOGS_DIR, MODELS_DIR, PROJECT_ROOT,
+    STATE_ROOT, ensure_dirs, is_frozen,
+)
+
+# Names re-exported from .paths, so `from .config import MODELS_DIR` keeps
+# working for the rest of the package.
+__all__ = [
+    "CONFIG_PATH", "DATA_DIR", "ENV_PATH", "LOGS_DIR", "MODELS_DIR",
+    "PROJECT_ROOT", "STATE_ROOT", "ensure_dirs", "is_frozen",
+    "DEFAULTS", "load_config", "safe_roots",
+]
 
 DEFAULTS: dict[str, Any] = {
     "assistant": {
@@ -179,7 +188,7 @@ def _coerce(raw: str, like: Any) -> Any:
 
 def _load_dotenv() -> None:
     """Pull .env into the environment so API keys stay out of the shell profile."""
-    env_file = PROJECT_ROOT / ".env"
+    env_file = ENV_PATH
     if not env_file.exists():
         return
     try:
@@ -203,7 +212,7 @@ def load_config(path: str | Path | None = None) -> dict:
     _load_dotenv()
     cfg = copy.deepcopy(DEFAULTS)
     candidate = Path(path) if path else Path(
-        os.environ.get("JARVIS_CONFIG", PROJECT_ROOT / "config.yaml")
+        os.environ.get("JARVIS_CONFIG", CONFIG_PATH)
     )
     if candidate.exists():
         if yaml is None:
@@ -212,8 +221,7 @@ def load_config(path: str | Path | None = None) -> dict:
             cfg = _deep_merge(cfg, yaml.safe_load(fh) or {})
     cfg = _apply_env(cfg)
     cfg["_config_path"] = str(candidate)
-    for directory in (DATA_DIR, MODELS_DIR, LOGS_DIR):
-        directory.mkdir(parents=True, exist_ok=True)
+    ensure_dirs()
     return cfg
 
 
