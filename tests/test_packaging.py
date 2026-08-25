@@ -135,6 +135,35 @@ def test_spec_collects_the_packages_that_load_data_at_runtime():
         assert package in text, f"{package} is not collected; it will be missing at runtime"
 
 
+def test_spec_entry_point_is_the_absolute_import_launcher():
+    """PyInstaller runs the entry script as top-level "__main__", not as a
+    module inside its package. Pointing it at jarvis/__main__.py makes every
+    relative import in that file raise ImportError the moment the frozen app
+    starts - it cannot even reach main(). run.py imports the package absolutely,
+    which preserves the package context."""
+    text = SPEC.read_text()
+    assert '["run.py"]' in text
+    assert '["jarvis/__main__.py"]' not in text
+
+
+def test_launcher_uses_absolute_imports_and_main_uses_relative():
+    """The premise of the test above: __main__ genuinely cannot be the entry
+    script, and run.py genuinely can."""
+    root = SPEC.parent
+    launcher = (root / "run.py").read_text()
+    entry = (root / "jarvis" / "__main__.py").read_text()
+
+    assert "from jarvis." in launcher, "run.py must import the package absolutely"
+    assert "\nfrom ." not in launcher, "run.py must not use relative imports"
+    assert "from .config import" in entry, "premise changed: __main__ no longer relative"
+
+
+def test_spec_collects_the_whole_jarvis_package():
+    """With run.py as the entry script, PyInstaller follows imports from there;
+    UI modules chosen at runtime by config still need collecting explicitly."""
+    assert 'collect_submodules("jarvis")' in SPEC.read_text()
+
+
 def test_spec_does_not_exclude_something_we_import():
     """An over-eager exclude list is the classic way to ship a broken build."""
     text = SPEC.read_text()

@@ -14,7 +14,9 @@ runtime that a static analyser cannot see:
 Anything missed here shows up as a "module not found" crash on the user's
 machine, never at build time - hence the explicit lists.
 """
+import os
 import sys
+
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 datas = []
@@ -58,11 +60,8 @@ hiddenimports += [
     "psutil",
     "yaml",
     "bs4",
-    "jarvis.ui.command_center",
-    "jarvis.ui.hud",
-    "jarvis.ui.console",
-    "jarvis.ui.first_run",
 ]
+hiddenimports += collect_submodules("jarvis")
 
 # sounddevice bundles PortAudio as package data on Windows.
 try:
@@ -73,9 +72,14 @@ except Exception:
 # Our own defaults, so a fresh install has something to copy from.
 datas += [("config.example.yaml", "."), ("README.md", ".")]
 
+# Entry point is run.py, NOT jarvis/__main__.py. PyInstaller executes the entry
+# script as top-level "__main__" rather than as a module inside its package, so
+# jarvis/__main__.py's relative imports ("from .config import ...") raise
+# ImportError the instant the frozen app starts. run.py imports the package
+# absolutely, which keeps the package context intact.
 a = Analysis(
-    ["jarvis/__main__.py"],
-    pathex=[],
+    ["run.py"],
+    pathex=[os.path.dirname(os.path.abspath(SPEC))],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
