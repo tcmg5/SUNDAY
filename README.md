@@ -1,0 +1,318 @@
+# J.A.R.V.I.S.
+
+A voice-driven desktop assistant in the Iron Man mould. Leave it running in the
+corner of your screen. Say **"hey JARVIS"**, ask for something, and it does it —
+organizes your files, searches the web, opens apps, answers questions — then
+tells you what it did, out loud, in a British accent.
+
+```
+        ╭──────────────────────────────╮
+        │  J.A.R.V.I.S.      MUTE   ✕  │
+        │                              │
+        │           ◜◝◜◝◜◝             │   ← arc reactor: rotating arcs,
+        │         ◜   ███   ◝          │     pulses with your voice, colour
+        │           ◟◞◟◞◟◞             │     changes with state
+        │                              │
+        │          LISTENING           │
+        │          Go ahead...         │
+        │  ┌────────────────────────┐  │
+        │  │ YOU    organize my     │  │
+        │  │        downloads       │  │
+        │  │ ·      inspect dir     │  │
+        │  │ JARVIS Forty-one files │  │
+        │  │        — mostly PDFs.  │  │
+        │  │        Shall I file    │  │
+        │  │        them by type?   │  │
+        │  └────────────────────────┘  │
+        │  │ or type a command...   │  │
+        ╰──────────────────────────────╯
+```
+
+---
+
+## Quick start
+
+```bash
+git clone <this repo> && cd SUNDAY
+./setup.sh                      # macOS / Linux
+# .\setup.ps1                   # Windows (PowerShell)
+
+# put your key in .env
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+
+python -m jarvis doctor         # verify every dependency and key
+python -m jarvis                # go
+```
+
+Then say **"hey JARVIS"**.
+
+`doctor` is the important one — it checks each subsystem separately and tells
+you exactly what's missing and how to fix it, rather than dying with a stack
+trace on launch.
+
+### Requirements
+
+- Python 3.9+
+- An Anthropic API key ([console.anthropic.com](https://console.anthropic.com))
+- A microphone
+- ~2 GB disk for the local speech models (downloaded once, on first run)
+
+Everything except the reasoning runs **locally and offline**: the wake word,
+speech recognition, and the voice. Only the thinking goes to the API.
+
+---
+
+## The Voice
+
+You asked me to find the right voice. Here's what's actually available, best
+first.
+
+### 1. ElevenLabs — closest to the films, paid
+
+Nothing free comes near it. ElevenLabs' voice designer produces a genuinely
+convincing JARVIS, and the community has published several presets. Free tier
+covers roughly 10 minutes of speech a month; the cheapest paid tier is about
+$5/month, which is a lot of assistant replies.
+
+```yaml
+# config.yaml
+tts:
+  engine: elevenlabs
+  elevenlabs_voice_id: "<paste the voice ID here>"
+```
+```bash
+echo "ELEVENLABS_API_KEY=..." >> .env
+```
+
+Browse or design one at [elevenlabs.io](https://elevenlabs.io/voice-library) —
+search "JARVIS" or "British butler AI". [Fish Audio](https://fish.audio) also
+hosts a free ready-made Jarvis/Iron Man voice if you'd rather not design one.
+
+### 2. Piper `en_GB-alan-medium` — free, offline, the default
+
+This is what ships enabled. Piper is a fast local neural TTS; `alan` is a
+British male read that is calm and slightly clipped — the right register.
+It isn't Paul Bettany, but it's unmistakably the same character, it costs
+nothing, it works with no internet, and latency is about 50 ms.
+
+```bash
+python -m jarvis voices              # see all the candidates
+python -m jarvis say "Good evening. All systems are nominal."
+```
+
+| Voice | Character |
+|---|---|
+| `en_GB-alan-medium` ★ | Calm, measured British male. The default. |
+| `en_GB-northern_english_male-medium` | Warmer, more casual |
+| `en_GB-semaine-medium` | Clipped and formal — more android than butler |
+| `en_US-ryan-high` | Very clean American, if you don't want the accent |
+
+### 3. The filter — where most of the character actually comes from
+
+Raw TTS sounds like an audiobook. JARVIS sounds like a voice *in a room*. That
+difference is signal processing, not the voice model, and it's applied on top of
+whichever engine you choose ([`jarvis/audio/tts.py`](jarvis/audio/tts.py)):
+
+- **120 Hz high-pass** — strips the chesty low end that marks a recording as
+  close-mic'd
+- **Presence tilt** — a gentle high shelf so it carries across a room
+- **Short multi-tap reverb** — five non-harmonically spaced reflections, giving
+  a tail that reads as "large, quiet space" without sounding like a cathedral
+
+Hear it for yourself:
+
+```bash
+python -m jarvis say "Good evening, sir."                    # filtered
+JARVIS_TTS_JARVIS_FILTER=false python -m jarvis say "Good evening, sir."
+```
+
+Tune `filter_reverb` in `config.yaml` — `0.0` is dry, `0.18` is the default,
+`0.35` is a hangar.
+
+### The wake word
+
+"Hey JARVIS" isn't an arbitrary choice: [openWakeWord](https://github.com/dscripka/openWakeWord)
+ships a pretrained `hey_jarvis` model, trained on ~200,000 synthetic utterances
+of that exact phrase, scoring 0.98+ on clear speech. It runs offline on CPU with
+no account or key. The wake phrase you wanted is, conveniently, the one with the
+best free model already trained for it.
+
+If it triggers too often, raise `wake.threshold` toward 0.65. If it misses you,
+lower it toward 0.35.
+
+---
+
+## Things to say
+
+**Files**
+> "Hey JARVIS — organize my downloads."
+> "Clean up my desktop by date."
+> "Find every PDF I saved this week."
+> "Which files are eating the most space in Documents?"
+> "Undo that."
+
+**Web**
+> "What's the weather in Tokyo?"
+> "Search for the best mechanical keyboards and tell me the top three."
+> "Pull up the React docs."       ← opens the browser
+> "Who won the game last night?"  ← reads you the answer
+
+**Desktop**
+> "Open Spotify."
+> "Take a screenshot."
+> "Set the volume to thirty."
+> "What's on my clipboard?"
+> "System status."
+
+**Memory**
+> "Remember that my project folder is Documents slash Atlas."
+> "Where's my project folder?"
+
+After it answers, it keeps listening for about 8 seconds — so you can just say
+"and also open Slack" without the wake word again. Say "never mind" to cancel,
+or "stand down" to end the exchange.
+
+Can't talk? Type in the HUD's input box, or run `python -m jarvis --text`.
+
+---
+
+## What it will and won't do to your files
+
+This is the part worth reading carefully, since it has write access to your
+disk.
+
+**Sandboxed.** JARVIS may only touch paths under `files.safe_roots` — by default
+Desktop, Downloads, Documents and Pictures. Everything else is refused. Paths
+are fully resolved before the check, so `~/Downloads/../../.ssh/id_rsa` fails
+rather than sneaking past a string comparison. Names like `.ssh`, `.aws`,
+`.git` and `AppData` are blocked even inside a permitted root.
+
+**Plan first, then apply.** `organize_files` runs as a dry run by default and
+returns a plan. JARVIS is instructed to read that plan back to you and wait for
+a yes before applying it. Batches over 25 files need explicit confirmation
+regardless.
+
+**Reversible.** Every applied move is journaled to `data/file_journal.jsonl`.
+"Undo that" puts everything back, including removing folders it created.
+
+**Never a hard delete.** There is no permanent-delete tool. Deletions go to the
+system trash, and nowhere else.
+
+**Shell is off.** Set `shell.enabled: true` if you want it, and even then
+anything outside the allowlist requires spoken confirmation, with a hard-coded
+refusal list on top.
+
+Widening `safe_roots` to `~` is possible. It is also a bad idea.
+
+---
+
+## Configuration
+
+`config.yaml` (copy from `config.example.yaml`); keys go in `.env`. Every
+setting is documented inline. The ones you'll actually touch:
+
+| Setting | Why you'd change it |
+|---|---|
+| `assistant.address_user_as` | It calls you "sir" by default. Your name works. |
+| `wake.threshold` | Too many false triggers, or it can't hear you |
+| `audio.silence_timeout_sec` | Raise it if it cuts you off mid-sentence |
+| `audio.input_device` | Pick a specific mic (`python -m jarvis devices`) |
+| `stt.model` | `small.en` is more accurate, `tiny.en` is faster |
+| `tts.piper_voice` | A different voice |
+| `files.safe_roots` | Which directories it may touch |
+| `ui.position` | Which corner the HUD sits in |
+
+Any setting can be overridden by environment variable:
+`JARVIS_WAKE_THRESHOLD=0.7 python -m jarvis`
+
+---
+
+## Leaving it running
+
+**macOS** — `Settings → General → Login Items → +` and add a small launcher:
+```bash
+#!/bin/bash
+cd /path/to/SUNDAY && ./.venv/bin/python -m jarvis
+```
+Grant Microphone and Accessibility permission the first time it asks.
+
+**Windows** — put a shortcut to `pythonw.exe run.py` in
+`shell:startup` (Win+R). `pythonw` runs it without a console window.
+
+**Linux** — a `.desktop` file in `~/.config/autostart/` with
+`Exec=/path/to/SUNDAY/.venv/bin/python -m jarvis`.
+
+The HUD is frameless and always-on-top. Drag it anywhere, Esc or ✕ to quit,
+MUTE to stop it listening without shutting it down.
+
+---
+
+## How it works
+
+```
+  mic ─► wake word ─► endpointer ─► whisper ─► Claude ─► tools
+        (openWakeWord)  (webrtcvad)  (local)      │         │
+                                                  ▼         ▼
+                                       piper/ElevenLabs   files, web,
+                                            + filter      desktop
+                                                  │
+                                                  ▼
+                                              speakers
+```
+
+One microphone stream feeds everything, with a 1.5 s pre-roll buffer so speech
+that overlaps the wake word isn't lost. The assistant loop runs on its own
+thread and publishes state to an event bus; the Qt HUD subscribes and draws.
+
+```
+jarvis/
+├── audio/     mic, wake word, endpointing, speech-to-text, voice
+├── brain/     Claude tool-use loop, persona prompt, the tools themselves
+│   └── tools/ files · web · system · shell
+├── core/      state machine, event bus, path safety
+└── ui/        HUD overlay, console fallback
+```
+
+Adding a tool is one function plus one `_reg(...)` call in
+[`jarvis/brain/tools/__init__.py`](jarvis/brain/tools/__init__.py).
+
+---
+
+## Troubleshooting
+
+Run `python -m jarvis doctor` first. Then:
+
+**It never wakes up.** Check the mic with `python -m jarvis devices` and set
+`audio.input_device`. Lower `wake.threshold` to 0.35. Say "hey JARVIS" as one
+phrase, not two words with a gap.
+
+**It wakes up at random.** Raise `wake.threshold` to 0.65.
+
+**It cuts me off mid-sentence.** Raise `audio.silence_timeout_sec` to 1.5.
+
+**It hears itself and replies to its own voice.** Headphones fix it outright.
+The mic buffer is already flushed after each reply, but a loud speaker close to
+a sensitive mic can still get through.
+
+**`OSError: PortAudio library not found`.** `brew install portaudio` on macOS,
+`sudo apt install portaudio19-dev` on Debian/Ubuntu.
+
+**Qt won't start on Linux.** `sudo apt install libxcb-cursor0`. Or run with
+`--ui console`.
+
+**Whisper is slow.** Use `stt.model: tiny.en`, or set `stt.device: cuda` if you
+have an NVIDIA GPU.
+
+Full logs are in `logs/jarvis.log`.
+
+---
+
+## Tests
+
+```bash
+python -m pytest tests/ -q      # 72 tests, no hardware or network needed
+```
+
+The suite concentrates on the parts where a bug is expensive: the path sandbox,
+the organize/undo round trip, the tool-use loop (against a stubbed client), and
+the endpointing that decides when you've stopped talking.

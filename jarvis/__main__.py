@@ -1,0 +1,197 @@
+"""Command line entry point.
+
+    python -m jarvis            # HUD + voice (the normal way to run it)
+    python -m jarvis --text     # keyboard only, no microphone
+    python -m jarvis doctor     # check every dependency and key
+    python -m jarvis devices    # list audio devices
+    python -m jarvis voices     # list JARVIS-suitable voices
+    python -m jarvis say "..."  # test the voice
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+
+from .config import load_config, safe_roots
+from .logging_setup import setup_logging
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="jarvis", description="Your desktop AI assistant.")
+    parser.add_argument("command", nargs="?", default="run",
+                        choices=["run", "doctor", "devices", "voices", "say"])
+    parser.add_argument("text", nargs="*", help="Text for the 'say' command.")
+    parser.add_argument("--config", help="Path to config.yaml")
+    parser.add_argument("--ui", choices=["hud", "console", "none"], help="Override UI mode")
+    parser.add_argument("--text-mode", "--text", dest="text_mode", action="store_true",
+                        help="Type commands instead of speaking them")
+    parser.add_argument("--no-wake", action="store_true", help="Disable the wake word")
+    parser.add_argument("--no-voice", action="store_true", help="Silence TTS output")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    args = parser.parse_args(argv)
+
+    cfg = load_config(args.config)
+    if args.ui:
+        cfg["ui"]["mode"] = args.ui
+    if args.no_wake:
+        cfg["wake"]["enabled"] = False
+    if args.no_voice:
+        cfg["tts"]["engine"] = "none"
+    setup_logging(cfg, args.verbose)
+
+    if args.command == "doctor":
+        return doctor(cfg)
+    if args.command == "devices":
+        return devices()
+    if args.command == "voices":
+        return voices(cfg)
+    if args.command == "say":
+        return say(cfg, " ".join(args.text) or "All systems are functioning within normal parameters.")
+    return run(cfg, args)
+
+
+def run(cfg: dict, args) -> int:
+    from .core.assistant import Assistant
+
+    assistant = Assistant(cfg)
+    try:
+        if args.text_mode:
+            from .ui.console import run_text_mode
+
+            return run_text_mode(assistant, cfg)
+        if cfg["ui"]["mode"] == "hud":
+            try:
+                from .ui.hud import run_hud
+
+                return run_hud(assistant, cfg)
+            except RuntimeError as exc:
+                print(f"HUD unavailable ({exc}); falling back to console.\n")
+        from .ui.console import run_console
+
+        return run_console(assistant, cfg)
+    except KeyboardInterrupt:
+        assistant.stop()
+        return 0
+    except Exception as exc:
+        print(f"\n\033[91mFailed to start: {exc}\033[0m")
+        print("Run `python -m jarvis doctor` to find out what's missing.")
+        return 1
+
+
+def doctor(cfg: dict) -> int:
+    """Check every moving part and say exactly what's wrong with each."""
+    print("\n\033[36mJARVIS system check\033[0m\n" + "─" * 52)
+    problems = 0
+
+    def check(label: str, ok: bool, detail: str = "") -> None:
+        nonlocal problems
+        mark = "\033[92m✓\033[0m" if ok else "\033[91m✗\033[0m"
+        print(f" {mark} {label:<26} {detail}")
+        if not ok:
+            problems += 1
+
+    print("\n\033[1mCore\033[0m")
+    check("Python", sys.version_info >= (3, 9), f"{sys.version.split()[0]}")
+    for module, label in (
+        ("numpy", "numpy"), ("anthropic", "anthropic"), ("yaml", "PyYAML"),
+        ("httpx", "httpx"),
+    ):
+        try:
+            __import__(module)
+            check(label, True)
+        except ImportError:
+            check(label, False, "pip install -r requirements.txt")
+
+    print("\n\033[1mAudio in\033[0m")
+    try:
+        import sounddevice as sd
+
+        default_in = sd.query_devices(kind="input")
+        check("sounddevice", True, default_in["name"][:32])
+    except Exception as exc:
+        check("sounddevice", False, str(exc)[:44])
+    for module, label, hint in (
+        ("openwakeword", "openwakeword", "pip install openwakeword"),
+        ("webrtcvad", "webrtcvad", "pip install webrtcvad (optional)"),
+        ("faster_whisper", "faster-whisper", "pip install faster-whisper"),
+    ):
+        try:
+            __import__(module)
+            check(label, True)
+        except ImportError:
+            check(label, False, hint)
+
+    print("\n\033[1mVoice out\033[0m")
+    engine = cfg["tts"]["engine"]
+    if engine == "piper":
+        try:
+            import piper  # noqa: F401
+
+            check("piper", True, cfg["tts"]["piper_voice"])
+        except ImportError:
+            check("piper", False, "pip install piper-tts")
+        from .config import MODELS_DIR
+
+        model = MODELS_DIR / "piper" / f"{cfg['tts']['piper_voice']}.onnx"
+        check("voice model", model.exists(),
+              str(model) if model.exists() else "will download on first run")
+    elif engine == "elevenlabs":
+        check("ELEVENLABS_API_KEY", bool(cfg["secrets"]["elevenlabs_api_key"]), "")
+        check("voice id set", bool(cfg["tts"]["elevenlabs_voice_id"]), "")
+
+    print("\n\033[1mBrain\033[0m")
+    check("ANTHROPIC_API_KEY", bool(cfg["secrets"]["anthropic_api_key"]),
+          "export ANTHROPIC_API_KEY=..." if not cfg["secrets"]["anthropic_api_key"] else cfg["assistant"]["model"])
+
+    print("\n\033[1mUI\033[0m")
+    try:
+        import PySide6  # noqa: F401
+
+        check("PySide6 (HUD)", True)
+    except ImportError:
+        check("PySide6 (HUD)", False, "pip install PySide6 — console mode still works")
+
+    print("\n\033[1mFile access\033[0m")
+    roots = safe_roots(cfg)
+    check("safe roots", bool(roots), ", ".join(str(r) for r in roots) or "none exist!")
+
+    print("\n" + "─" * 52)
+    if problems:
+        print(f" \033[91m{problems} problem(s) found.\033[0m See hints above.\n")
+    else:
+        print(" \033[92mAll systems nominal.\033[0m Run `python -m jarvis` to start.\n")
+    return 1 if problems else 0
+
+
+def devices() -> int:
+    from .audio.mic import list_devices
+
+    print("\nAudio devices:\n")
+    print(list_devices())
+    print("\nSet audio.input_device / audio.output_device in config.yaml to pick one.\n")
+    return 0
+
+
+def voices(cfg: dict) -> int:
+    from .audio.tts import RECOMMENDED_PIPER_VOICES
+
+    print("\n\033[36mVoices suited to a JARVIS read\033[0m (free, local, via piper)\n")
+    current = cfg["tts"]["piper_voice"]
+    for voice_id, note in RECOMMENDED_PIPER_VOICES:
+        marker = "\033[92m→\033[0m" if voice_id == current else " "
+        print(f" {marker} {voice_id:<38} {note}")
+    print("\n Set tts.piper_voice in config.yaml, then:  python -m jarvis say \"test\"")
+    print(" For the closest match to the films, use ElevenLabs — see README.\n")
+    return 0
+
+
+def say(cfg: dict, text: str) -> int:
+    from .audio.tts import Speaker
+
+    print(f"\nSpeaking via {cfg['tts']['engine']}: \"{text}\"\n")
+    Speaker(cfg).say(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

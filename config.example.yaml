@@ -1,0 +1,76 @@
+# Copy to config.yaml and edit. Anything you leave out falls back to the
+# defaults in jarvis/config.py. API keys live in .env, not here.
+
+assistant:
+  name: JARVIS
+  # What it calls you. "sir" is canon; your name works too.
+  address_user_as: sir
+  model: claude-opus-5
+  # Seconds it keeps listening after answering, so you can say "and also..."
+  # without repeating the wake word. Set 0 to disable.
+  followup_window_sec: 8.0
+
+wake:
+  enabled: true
+  model: hey_jarvis
+  # Lower = more sensitive (more false triggers). 0.5 is a good starting point;
+  # try 0.35 in a quiet room, 0.65 if it keeps waking up during films.
+  threshold: 0.5
+
+audio:
+  # Run `python -m jarvis devices` to see the list, then set an index or a
+  # substring of the device name. null = system default.
+  input_device: null
+  output_device: null
+  # How long a pause ends your sentence. Raise it if it cuts you off.
+  silence_timeout_sec: 1.1
+
+stt:
+  # tiny.en is fastest, small.en is noticeably more accurate. base.en is the
+  # sweet spot on most machines.
+  model: base.en
+  device: auto        # auto | cpu | cuda
+  compute_type: int8  # int8 on CPU, float16 on GPU
+
+tts:
+  # piper = free and offline. elevenlabs = much better, needs a key.
+  engine: piper
+  # `python -m jarvis voices` lists the good ones.
+  piper_voice: en_GB-alan-medium
+  # The room-tone filter. This is most of what makes it sound like JARVIS
+  # rather than a British audiobook. Turn it off to hear the difference.
+  jarvis_filter: true
+  filter_reverb: 0.18
+  # For ElevenLabs: put the voice ID here and set engine: elevenlabs
+  elevenlabs_voice_id: ""
+
+files:
+  # JARVIS can ONLY touch paths under these roots. Add your own; be deliberate.
+  # Do not add "~" unless you genuinely want it loose in your whole home dir.
+  safe_roots:
+    - ~/Desktop
+    - ~/Downloads
+    - ~/Documents
+    - ~/Pictures
+  # Batches larger than this need a spoken confirmation before they apply.
+  confirm_threshold: 25
+
+web:
+  engine: duckduckgo  # duckduckgo (no key) | brave | tavily
+  max_results: 6
+
+shell:
+  # Let JARVIS run shell commands. Off by default, and on purpose.
+  enabled: false
+  allowlist: [ls, pwd, df, du, date, whoami, uptime]
+
+ui:
+  mode: hud           # hud | console | none
+  always_on_top: true
+  opacity: 0.92
+  accent: "#4FD3FF"
+  position: bottom-right   # bottom-right | bottom-left | top-right | center
+
+logging:
+  level: INFO
+  save_transcripts: true

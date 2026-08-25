@@ -1,0 +1,23 @@
+# --- core -------------------------------------------------------------
+anthropic>=0.40.0          # the reasoning core
+numpy>=1.24                # audio buffers
+PyYAML>=6.0                # config.yaml
+httpx>=0.27                # web search, voice downloads, ElevenLabs
+python-dotenv>=1.0         # loads .env so keys aren't in your shell profile
+
+# --- audio ------------------------------------------------------------
+sounddevice>=0.4.6         # microphone + playback (needs PortAudio, see README)
+openwakeword>=0.6.0        # the "hey jarvis" wake word, offline
+faster-whisper>=1.0.0      # speech to text, offline
+webrtcvad>=2.0.10          # utterance endpointing
+piper-tts>=1.2.0           # the voice, offline
+
+# --- desktop ----------------------------------------------------------
+PySide6>=6.6               # the HUD overlay
+send2trash>=1.8            # deletes go to trash, never unlink()
+psutil>=5.9                # system status reporting
+beautifulsoup4>=4.12       # readable text extraction from web pages
+
+# --- optional ---------------------------------------------------------
+# miniaudio>=1.59          # decode ElevenLabs MP3 without ffmpeg
+# openai>=1.30             # only if stt.engine = "whisper-api"
