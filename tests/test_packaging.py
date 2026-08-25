@@ -67,6 +67,58 @@ def test_logging_setup_survives_a_windowed_build(monkeypatch, tmp_path):
     logging.getLogger().handlers.clear()
 
 
+# ── console encoding ─────────────────────────────────────────────────────
+def test_console_survives_a_legacy_codepage(monkeypatch):
+    """A frozen console app on Windows gets stdout on the legacy code page
+    (cp1252 on most Western installs), which cannot encode the box-drawing and
+    tick glyphs the CLI prints. Unfixed, `doctor` dies with UnicodeEncodeError
+    -- the one command someone runs when things are broken."""
+    import io
+
+    from jarvis.paths import configure_console
+
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="cp1252", errors="strict", write_through=True)
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(UnicodeEncodeError):
+        stream.write("─" * 10)          # the failure, before the fix
+
+    configure_console()
+    sys.stdout.write("─" * 52 + " ✓ ✗ ● ▸")   # must not raise
+    sys.stdout.flush()
+
+
+def test_configure_console_handles_streams_without_reconfigure(monkeypatch):
+    """Null streams (windowed build) have no reconfigure(); must not blow up."""
+    from jarvis.paths import _NullStream, configure_console
+
+    monkeypatch.setattr(sys, "stdout", _NullStream())
+    monkeypatch.setattr(sys, "stderr", _NullStream())
+    configure_console()
+    print("still fine")
+
+
+def test_configure_console_attaches_streams_when_absent(monkeypatch):
+    from jarvis.paths import configure_console
+
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    configure_console()
+    assert sys.stdout is not None and sys.stderr is not None
+
+
+def test_main_configures_the_console_before_printing():
+    """Ordering matters: doctor() prints unicode, so the reconfigure has to
+    happen at the very top of main(), not somewhere after argument parsing."""
+    from pathlib import Path as _Path
+
+    text = (_Path(__file__).resolve().parent.parent / "jarvis" / "__main__.py").read_text()
+    body = text[text.index("def main("):]
+    assert "configure_console()" in body
+    assert body.index("configure_console()") < body.index("parser.parse_args")
+
+
 # ── path resolution ──────────────────────────────────────────────────────
 def test_source_mode_keeps_state_beside_the_code():
     assert not paths.is_frozen()

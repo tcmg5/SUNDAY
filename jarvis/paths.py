@@ -93,3 +93,63 @@ def attach_null_streams() -> None:
         sys.stdout = _NullStream()
     if sys.stderr is None:
         sys.stderr = _NullStream()
+
+
+def _enable_windows_utf8_console() -> None:
+    """Make the Windows console accept UTF-8 and ANSI colour.
+
+    Two separate problems, both fatal-or-ugly and both Windows-only:
+
+    1. A console defaults to the legacy OEM/ANSI code page (cp1252 on most
+       Western installs), which cannot encode the box-drawing and tick marks
+       the CLI prints. Python raises UnicodeEncodeError and the process dies -
+       so `doctor`, the one command someone runs when things are broken, is
+       exactly the command that crashes.
+    2. ANSI escape sequences are not interpreted unless virtual-terminal
+       processing is switched on, so colour codes print as literal garbage.
+
+    Both are set here, defensively: every call is wrapped, because a process
+    with no attached console (a windowed build) has no console to configure.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        # 65001 is the UTF-8 code page.
+        kernel32.SetConsoleOutputCP(65001)
+        kernel32.SetConsoleCP(65001)
+
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        STD_OUTPUT_HANDLE = -11
+        handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(
+                handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            )
+    except Exception:
+        # No console attached, or an OS that refuses - neither is worth failing
+        # over, and the reconfigure below still prevents the crash.
+        pass
+
+
+def configure_console() -> None:
+    """Prepare stdout/stderr before anything writes to them.
+
+    Called first thing in main(): a windowed build has no streams at all, and a
+    console build on Windows has streams that cannot encode what we print.
+    """
+    attach_null_streams()
+    _enable_windows_utf8_console()
+    for stream in (sys.stdout, sys.stderr):
+        # errors="replace" is the safety net: even if the code page could not be
+        # changed, an unencodable glyph degrades to "?" instead of raising.
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass

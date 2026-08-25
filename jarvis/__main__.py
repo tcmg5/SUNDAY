@@ -15,12 +15,13 @@ import sys
 
 from .config import load_config, safe_roots
 from .logging_setup import setup_logging
-from .paths import attach_null_streams
+from .paths import configure_console
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Must happen before any output: a windowed build has no streams to use.
-    attach_null_streams()
+    # Must happen before any output: a windowed build has no streams at all,
+    # and a Windows console cannot encode what we print until reconfigured.
+    configure_console()
     parser = argparse.ArgumentParser(prog="jarvis", description="Your desktop AI assistant.")
     parser.add_argument("command", nargs="?", default="run",
                         choices=["run", "doctor", "devices", "voices", "say"])

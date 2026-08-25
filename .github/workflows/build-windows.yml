@@ -55,19 +55,22 @@ jobs:
         shell: pwsh
         run: |
           # `doctor` exercises the real import graph - the fastest way to catch
-          # a module PyInstaller failed to bundle. It exits non-zero when
-          # something is unconfigured (no API key here), so check the output
-          # rather than the exit code.
-          # The console twin, because the windowed exe writes nowhere.
+          # a module PyInstaller failed to bundle, or a crash on startup. It
+          # exits non-zero when something is merely unconfigured (no API key
+          # here), so inspect the output rather than the exit code.
+          # The console twin is used because the windowed exe writes nowhere.
           $out = & ".\dist\JARVIS\JARVIS-console.exe" doctor 2>&1 | Out-String
           Write-Host $out
+
+          # Crashes first: a traceback makes the missing-needle errors below
+          # misleading noise about the wrong problem.
+          if ($out -match "Traceback|ModuleNotFoundError|ImportError|UnicodeEncodeError") {
+            throw "the packaged executable crashed on startup - see the output above"
+          }
           foreach ($needle in @("openwakeword", "faster-whisper", "piper", "PySide6", "sounddevice")) {
             if ($out -notmatch [regex]::Escape($needle)) {
               throw "doctor output never mentioned '$needle' - the build is probably missing it"
             }
-          }
-          if ($out -match "ModuleNotFoundError|ImportError|Traceback") {
-            throw "the packaged executable hit an import error"
           }
           if (-Not (Test-Path ".\dist\JARVIS\JARVIS.exe")) {
             throw "the windowed executable was not produced"
