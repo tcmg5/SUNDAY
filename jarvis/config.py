@@ -110,13 +110,15 @@ DEFAULTS: dict[str, Any] = {
         "timeout_sec": 30,
     },
     "ui": {
-        # "hud" (floating always-on-top overlay) | "console" | "none"
-        "mode": "hud",
+        # "command_center" (full dashboard) | "hud" (compact overlay)
+        # | "console" | "none"
+        "mode": "command_center",
+        "start_maximized": True,
+        # HUD-only settings.
         "always_on_top": True,
         "opacity": 0.92,
         "accent": "#4FD3FF",
         "position": "bottom-right",  # or "top-right" | "center" | "bottom-left"
-        "click_through_when_idle": False,
     },
     "logging": {
         "level": "INFO",

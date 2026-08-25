@@ -65,7 +65,13 @@ shell:
   allowlist: [ls, pwd, df, du, date, whoami, uptime]
 
 ui:
-  mode: hud           # hud | console | none
+  # command_center = the full-screen dashboard (default)
+  # hud            = compact always-on-top overlay, stays out of the way
+  # console        = terminal only
+  mode: command_center
+  start_maximized: true
+
+  # HUD-only settings, ignored by the command center.
   always_on_top: true
   opacity: 0.92
   accent: "#4FD3FF"

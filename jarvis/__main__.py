@@ -1,6 +1,7 @@
 """Command line entry point.
 
-    python -m jarvis            # HUD + voice (the normal way to run it)
+    python -m jarvis            # command center + voice (the normal way)
+    python -m jarvis --ui hud   # compact always-on-top overlay instead
     python -m jarvis --text     # keyboard only, no microphone
     python -m jarvis doctor     # check every dependency and key
     python -m jarvis devices    # list audio devices
@@ -22,7 +23,8 @@ def main(argv: list[str] | None = None) -> int:
                         choices=["run", "doctor", "devices", "voices", "say"])
     parser.add_argument("text", nargs="*", help="Text for the 'say' command.")
     parser.add_argument("--config", help="Path to config.yaml")
-    parser.add_argument("--ui", choices=["hud", "console", "none"], help="Override UI mode")
+    parser.add_argument("--ui", choices=["command_center", "hud", "console", "none"],
+                        help="Override UI mode")
     parser.add_argument("--text-mode", "--text", dest="text_mode", action="store_true",
                         help="Type commands instead of speaking them")
     parser.add_argument("--no-wake", action="store_true", help="Disable the wake word")
@@ -59,13 +61,20 @@ def run(cfg: dict, args) -> int:
             from .ui.console import run_text_mode
 
             return run_text_mode(assistant, cfg)
-        if cfg["ui"]["mode"] == "hud":
+        mode = cfg["ui"]["mode"]
+        if mode in ("command_center", "hud"):
             try:
+                if mode == "command_center":
+                    from .ui.command_center import run_command_center
+
+                    return run_command_center(assistant, cfg)
                 from .ui.hud import run_hud
 
                 return run_hud(assistant, cfg)
+            except ImportError as exc:
+                print(f"Qt unavailable ({exc}); falling back to console.\n")
             except RuntimeError as exc:
-                print(f"HUD unavailable ({exc}); falling back to console.\n")
+                print(f"{mode} unavailable ({exc}); falling back to console.\n")
         from .ui.console import run_console
 
         return run_console(assistant, cfg)
@@ -147,9 +156,9 @@ def doctor(cfg: dict) -> int:
     try:
         import PySide6  # noqa: F401
 
-        check("PySide6 (HUD)", True)
+        check("PySide6", True, f"mode: {cfg['ui']['mode']}")
     except ImportError:
-        check("PySide6 (HUD)", False, "pip install PySide6 — console mode still works")
+        check("PySide6", False, "pip install PySide6 — console mode still works")
 
     print("\n\033[1mFile access\033[0m")
     roots = safe_roots(cfg)

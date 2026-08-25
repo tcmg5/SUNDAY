@@ -5,28 +5,11 @@ corner of your screen. Say **"hey JARVIS"**, ask for something, and it does it �
 organizes your files, searches the web, opens apps, answers questions — then
 tells you what it did, out loud, in a British accent.
 
-```
-        ╭──────────────────────────────╮
-        │  J.A.R.V.I.S.      MUTE   ✕  │
-        │                              │
-        │           ◜◝◜◝◜◝             │   ← arc reactor: rotating arcs,
-        │         ◜   ███   ◝          │     pulses with your voice, colour
-        │           ◟◞◟◞◟◞             │     changes with state
-        │                              │
-        │          LISTENING           │
-        │          Go ahead...         │
-        │  ┌────────────────────────┐  │
-        │  │ YOU    organize my     │  │
-        │  │        downloads       │  │
-        │  │ ·      inspect dir     │  │
-        │  │ JARVIS Forty-one files │  │
-        │  │        — mostly PDFs.  │  │
-        │  │        Shall I file    │  │
-        │  │        them by type?   │  │
-        │  └────────────────────────┘  │
-        │  │ or type a command...   │  │
-        ╰──────────────────────────────╯
-```
+![The JARVIS command center](docs/command-center.png)
+
+*Everything on that screen is live — see [Two window modes](#two-window-modes).
+Regenerate the shot with `python tools/screenshot.py`.*
+
 
 ---
 
@@ -220,7 +203,8 @@ setting is documented inline. The ones you'll actually touch:
 | `stt.model` | `small.en` is more accurate, `tiny.en` is faster |
 | `tts.piper_voice` | A different voice |
 | `files.safe_roots` | Which directories it may touch |
-| `ui.position` | Which corner the HUD sits in |
+| `ui.mode` | `command_center`, `hud`, or `console` |
+| `ui.position` | Which corner the compact HUD sits in |
 
 Any setting can be overridden by environment variable:
 `JARVIS_WAKE_THRESHOLD=0.7 python -m jarvis`
@@ -229,21 +213,50 @@ Any setting can be overridden by environment variable:
 
 ## Leaving it running
 
-**macOS** — `Settings → General → Login Items → +` and add a small launcher:
+**macOS** - `Settings → General → Login Items → +` and add a small launcher:
 ```bash
 #!/bin/bash
 cd /path/to/SUNDAY && ./.venv/bin/python -m jarvis
 ```
 Grant Microphone and Accessibility permission the first time it asks.
 
-**Windows** — put a shortcut to `pythonw.exe run.py` in
+**Windows** - put a shortcut to `pythonw.exe run.py` in
 `shell:startup` (Win+R). `pythonw` runs it without a console window.
 
-**Linux** — a `.desktop` file in `~/.config/autostart/` with
+**Linux** - a `.desktop` file in `~/.config/autostart/` with
 `Exec=/path/to/SUNDAY/.venv/bin/python -m jarvis`.
 
-The HUD is frameless and always-on-top. Drag it anywhere, Esc or ✕ to quit,
-MUTE to stop it listening without shutting it down.
+### Two window modes
+
+**Command center** (default) - the full dashboard above, meant for a second
+monitor or a spare corner of a big one. Frameless: drag the header to move,
+double-click it to maximize, Esc to quit. Space triggers listening without the
+wake word. Every panel is live:
+
+| Panel | Fed by |
+|---|---|
+| AI Core Overview | which subsystems actually loaded, and their models |
+| Holo core | assistant state - colour and spin rate follow it |
+| Live Intelligence Feed | real transcripts, replies, tool calls and errors |
+| Active Agents | lights the tile whose tool group just ran |
+| Mission Timeline | your actual requests this session, newest first |
+| System Monitor | psutil CPU / RAM / disk |
+| Memory & Session | entries in the memory store, turns, tool calls |
+| Integrations | which API keys and engines are genuinely configured |
+
+An "agent" here is a named group of tools, not a separate process - the
+Research tile lights when `web_search` runs, Files when `organize_files` does.
+The tiles report real work; they aren't decoration.
+
+**Compact HUD** - `python -m jarvis --ui hud`, or set `ui.mode: hud`. A small
+always-on-top panel with the arc reactor and a transcript feed, for when you
+want it present but not occupying a screen.
+
+### Fonts
+
+The UI asks for `Orbitron` and `Rajdhani` first and falls back to whatever your
+system has. Installing those two (both free on Google Fonts) is the single
+biggest visual upgrade - the layout is designed around them.
 
 ---
 
@@ -270,7 +283,10 @@ jarvis/
 ├── brain/     Claude tool-use loop, persona prompt, the tools themselves
 │   └── tools/ files · web · system · shell
 ├── core/      state machine, event bus, path safety
-└── ui/        HUD overlay, console fallback
+└── ui/        command center dashboard, compact HUD, console fallback
+    ├── theme.py    colour tokens, type scale, Qt stylesheet
+    ├── widgets.py  painted instruments: globe, gauges, waveforms
+    └── panels.py   composite rows: agent cards, feed items, providers
 ```
 
 Adding a tool is one function plus one `_reg(...)` call in
@@ -297,8 +313,11 @@ a sensitive mic can still get through.
 **`OSError: PortAudio library not found`.** `brew install portaudio` on macOS,
 `sudo apt install portaudio19-dev` on Debian/Ubuntu.
 
-**Qt won't start on Linux.** `sudo apt install libxcb-cursor0`. Or run with
-`--ui console`.
+**Qt won't start on Linux.** `sudo apt install libxcb-cursor0 libegl1`. Or run
+with `--ui console`.
+
+**The dashboard is too big for my screen.** Use `--ui hud` for the compact
+overlay, or set `ui.start_maximized: false`. Minimum usable size is 1180x760.
 
 **Whisper is slow.** Use `stt.model: tiny.en`, or set `stt.device: cuda` if you
 have an NVIDIA GPU.
@@ -310,9 +329,13 @@ Full logs are in `logs/jarvis.log`.
 ## Tests
 
 ```bash
-python -m pytest tests/ -q      # 72 tests, no hardware or network needed
+python -m pytest tests/ -q      # 81 tests, no hardware or network needed
 ```
 
 The suite concentrates on the parts where a bug is expensive: the path sandbox,
-the organize/undo round trip, the tool-use loop (against a stubbed client), and
-the endpointing that decides when you've stopped talking.
+the organize/undo round trip, the tool-use loop (against a stubbed client), the
+endpointing that decides when you've stopped talking, and the tool-to-agent-tile
+mapping that goes stale the moment someone adds a tool and forgets the UI.
+
+UI tests run headless via Qt's offscreen platform, and skip entirely if PySide6
+isn't installed.
