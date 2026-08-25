@@ -17,10 +17,10 @@ Regenerate the shot with `python tools/screenshot.py`.*
 
 ### Windows — installer (easiest)
 
-1. Download **`JARVIS-Setup.exe`** from
-   [Releases](https://github.com/tcmg5/SUNDAY/releases), or from the
-   [latest build](https://github.com/tcmg5/SUNDAY/actions/workflows/build-windows.yml)
-   (open the newest run, scroll to **Artifacts**).
+1. Download **[JARVIS-Setup-1.0.0.exe](https://github.com/tcmg5/SUNDAY/releases/download/v1.0.0/JARVIS-Setup-1.0.0.exe)** (178 MB).
+   There is also a [portable zip](https://github.com/tcmg5/SUNDAY/releases/download/v1.0.0/JARVIS-portable-1.0.0.zip)
+   (245 MB) that needs no installation - unzip it and run `JARVIS.exe`.
+   Older and newer builds are on the [Releases page](https://github.com/tcmg5/SUNDAY/releases).
 2. Run it. No administrator rights needed — it installs into your user profile.
    - Windows SmartScreen will say the publisher is unknown, because the build
      isn't code-signed. Click **More info** → **Run anyway**. Signing needs a
