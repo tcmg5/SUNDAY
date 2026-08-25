@@ -1,0 +1,15 @@
+# Windows shells need CRLF; git checks these out with the right endings
+# regardless of the platform the commit was made on.
+*.bat    text eol=crlf
+*.ps1    text eol=crlf
+*.cmd    text eol=crlf
+
+# Everything else stays LF.
+*.py     text eol=lf
+*.sh     text eol=lf
+*.md     text eol=lf
+*.yaml   text eol=lf
+*.txt    text eol=lf
+
+*.png    binary
+*.onnx   binary

@@ -9,7 +9,11 @@ python-dotenv>=1.0         # loads .env so keys aren't in your shell profile
 sounddevice>=0.4.6         # microphone + playback (needs PortAudio, see README)
 openwakeword>=0.6.0        # the "hey jarvis" wake word, offline
 faster-whisper>=1.0.0      # speech to text, offline
-webrtcvad>=2.0.10          # utterance endpointing
+# Utterance endpointing. Upstream webrtcvad ships no Windows wheels and tries to
+# compile C against MSVC; webrtcvad-wheels is the same library with prebuilt
+# binaries and the identical import name.
+webrtcvad>=2.0.10; platform_system != "Windows"
+webrtcvad-wheels>=2.0.14; platform_system == "Windows"
 piper-tts>=1.2.0           # the voice, offline
 
 # --- desktop ----------------------------------------------------------

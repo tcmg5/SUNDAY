@@ -15,23 +15,58 @@ Regenerate the shot with `python tools/screenshot.py`.*
 
 ## Quick start
 
-```bash
-git clone <this repo> && cd SUNDAY
-./setup.sh                      # macOS / Linux
-# .\setup.ps1                   # Windows (PowerShell)
+### Windows
 
-# put your key in .env
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-
-python -m jarvis doctor         # verify every dependency and key
-python -m jarvis                # go
-```
+1. **Install Python** from [python.org/downloads](https://www.python.org/downloads/)
+   if you don't have it. On the installer's first screen, tick
+   **"Add python.exe to PATH"** - almost every Windows problem below traces back
+   to skipping that box.
+2. **Download this project**: green `Code` button on GitHub → `Download ZIP` →
+   right-click the ZIP → `Extract All`. Or `git clone` it if you have git.
+3. **Right-click `setup.ps1`** → **`Run with PowerShell`**. It builds a virtual
+   environment, installs everything, downloads the wake-word model and the
+   voice, and puts a JARVIS shortcut on your desktop. Give it five to ten
+   minutes - Qt and Whisper are large.
+   - If Windows says *"running scripts is disabled on this system"*, open
+     PowerShell in the project folder and run these two lines instead. The first
+     relaxes the policy **for that one window only** and changes nothing
+     permanently:
+     ```powershell
+     Set-ExecutionPolicy -Scope Process -Bypass -Force
+     .\setup.ps1
+     ```
+4. **Add your API key.** Open `.env` in Notepad and replace
+   `ANTHROPIC_API_KEY=sk-ant-...` with a real key from
+   [console.anthropic.com](https://console.anthropic.com).
+5. **Double-click `JARVIS.bat`**, or the desktop shortcut.
+6. **Allow the microphone** when Windows asks. If it never asks and the wake
+   word doesn't work, go to `Settings → Privacy & security → Microphone` and
+   turn on **"Let desktop apps access your microphone"**.
 
 Then say **"hey JARVIS"**.
 
-`doctor` is the important one — it checks each subsystem separately and tells
-you exactly what's missing and how to fix it, rather than dying with a stack
-trace on launch.
+If double-clicking `JARVIS.bat` seems to do nothing, run
+**`JARVIS (show errors).bat`** instead - same thing, but it keeps a console
+window open so you can read what went wrong.
+
+### macOS / Linux
+
+```bash
+git clone <this repo> && cd SUNDAY
+./setup.sh
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+python -m jarvis
+```
+
+### Verify before you start
+
+```bash
+python -m jarvis doctor         # checks every dependency and key separately
+```
+
+`doctor` is the one to reach for when something's wrong - it checks each
+subsystem independently and tells you exactly what's missing and how to fix it,
+rather than dying with a stack trace on launch.
 
 ### Requirements
 
@@ -220,8 +255,8 @@ cd /path/to/SUNDAY && ./.venv/bin/python -m jarvis
 ```
 Grant Microphone and Accessibility permission the first time it asks.
 
-**Windows** - put a shortcut to `pythonw.exe run.py` in
-`shell:startup` (Win+R). `pythonw` runs it without a console window.
+**Windows** - press Win+R, type `shell:startup`, and drop a copy of the
+desktop shortcut into that folder.
 
 **Linux** - a `.desktop` file in `~/.config/autostart/` with
 `Exec=/path/to/SUNDAY/.venv/bin/python -m jarvis`.
@@ -311,7 +346,21 @@ The mic buffer is already flushed after each reply, but a loud speaker close to
 a sensitive mic can still get through.
 
 **`OSError: PortAudio library not found`.** `brew install portaudio` on macOS,
-`sudo apt install portaudio19-dev` on Debian/Ubuntu.
+`sudo apt install portaudio19-dev` on Debian/Ubuntu. Windows needs nothing -
+PortAudio ships inside the `sounddevice` wheel.
+
+**Windows: `'python' is not recognized`.** Python isn't on your PATH. Reinstall
+from python.org and tick **"Add python.exe to PATH"**, or use `py` in place of
+`python`.
+
+**Windows: `error: Microsoft Visual C++ 14.0 or greater is required`.** A
+package tried to compile from source. `requirements.txt` already routes around
+the usual culprit (`webrtcvad` → `webrtcvad-wheels`, which ships prebuilt
+binaries), so if you still hit this, the error names the package - paste it into
+an issue rather than installing 6 GB of Build Tools.
+
+**Windows: the shortcut does nothing.** Run `JARVIS (show errors).bat` to see
+the real message. Usually a missing API key in `.env`.
 
 **Qt won't start on Linux.** `sudo apt install libxcb-cursor0 libegl1`. Or run
 with `--ui console`.
